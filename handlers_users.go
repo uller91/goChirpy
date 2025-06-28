@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"time"
 	"github.com/google/uuid"
+	"github.com/uller91/goChirpy/internal/aut"
+	"github.com/uller91/goChirpy/internal/database"
 )
 	
 type User struct {
@@ -12,11 +14,13 @@ type User struct {
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 	Email     string `json:"email"`
+	//HashedPassword string `json: "hash"`	 for debugging only!
 }
 
-func (cfg *apiConfig) handlerCreateUser(w http.ResponseWriter, req *http.Request) {
+func (cfg *apiConfig) handlerLoginUser(w http.ResponseWriter, req *http.Request) {
 	type parameters struct {
         Email string `json:"email"`
+		Password string  `json: "password"`
     }
 
 	decoder := json.NewDecoder(req.Body)
@@ -28,7 +32,51 @@ func (cfg *apiConfig) handlerCreateUser(w http.ResponseWriter, req *http.Request
     }
 
 	returnUsr := User{}
-	newUsr, err := cfg.database.CreateUser(req.Context(), params.Email)
+
+	usr, err := cfg.database.GetUserFromEmail(req.Context(), params.Email)
+	if err!= nil {
+		respondWithError(w, http.StatusUnauthorized, "Incorrect email or password", err)
+		return
+	} 
+
+	err = aut.CheckPasswordHash(params.Password, usr.HashedPassword)
+	if err!= nil {
+		respondWithError(w, http.StatusUnauthorized, "Incorrect email or password", err)
+		return
+	} 
+
+	returnUsr.ID = usr.ID
+	returnUsr.CreatedAt = usr.CreatedAt
+	returnUsr.UpdatedAt = usr.UpdatedAt
+	returnUsr.Email = usr.Email
+
+	respondWithJSON(w, http.StatusOK, returnUsr)
+}
+
+func (cfg *apiConfig) handlerCreateUser(w http.ResponseWriter, req *http.Request) {
+	type parameters struct {
+        Email string `json:"email"`
+		Password string  `json: "password"`
+    }
+
+	decoder := json.NewDecoder(req.Body)
+    params := parameters{}
+    err := decoder.Decode(&params)
+    if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Error during JSON decoding", err)
+		return
+    }
+
+	returnUsr := User{}
+
+	hashedPswd, err := aut.HashPassword(params.Password) 
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "There was a problem during password hashing", err)
+		return
+    }
+
+	UsrParams := database.CreateUserParams{Email: params.Email, HashedPassword: hashedPswd}
+	newUsr, err := cfg.database.CreateUser(req.Context(), UsrParams)
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "There was a problem during the user creation", err)
 		return
@@ -38,6 +86,7 @@ func (cfg *apiConfig) handlerCreateUser(w http.ResponseWriter, req *http.Request
 	returnUsr.CreatedAt = newUsr.CreatedAt
 	returnUsr.UpdatedAt = newUsr.UpdatedAt
 	returnUsr.Email = newUsr.Email
+	//returnUsr.HashedPassword = newUsr.HashedPassword	for debugging only!
 
 	respondWithJSON(w, http.StatusCreated, returnUsr)
 }
