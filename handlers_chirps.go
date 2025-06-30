@@ -7,6 +7,7 @@ import (
 	"time"
 	"github.com/google/uuid"
 	"github.com/uller91/goChirpy/internal/database"
+	"github.com/uller91/goChirpy/internal/aut"
 )
 
 type Chirp struct {
@@ -69,14 +70,26 @@ func (cfg *apiConfig) handlerGetAllChirps(w http.ResponseWriter, req *http.Reque
 func (cfg *apiConfig) handlerCreateChirp(w http.ResponseWriter, req *http.Request) {
 	type parameters struct {
         Message string `json:"body"`
-		UserId uuid.UUID `json:"user_id"`
+		UserId uuid.UUID `json:"user_id"` //unused at the moment
+    }
+
+	token, err := aut.GetBearerToken(req.Header)
+	if err != nil {
+		respondWithError(w, http.StatusUnauthorized, "No autentication token in the header", err)
+		return
     }
 
     decoder := json.NewDecoder(req.Body)
     params := parameters{}
-    err := decoder.Decode(&params)
+    err = decoder.Decode(&params)
     if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "Error during JSON decoding", err)
+		return
+    }
+
+	userId, err := aut.ValidateJWT(token, cfg.secret)
+	if err != nil{
+		respondWithError(w, http.StatusUnauthorized, "No access for you!", err)
 		return
     }
 
@@ -90,7 +103,7 @@ func (cfg *apiConfig) handlerCreateChirp(w http.ResponseWriter, req *http.Reques
 
 	returnChirp := Chirp{}
 
-	dbParams := database.CreateChirpParams{Body: cleanedMessage, UserID: params.UserId}
+	dbParams := database.CreateChirpParams{Body: cleanedMessage, UserID: userId}
 	newChirp, err := cfg.database.CreateChirp(req.Context(), dbParams)
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "There was a problem during the chirp creation", err)

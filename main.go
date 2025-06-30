@@ -10,6 +10,8 @@ import (
 	"database/sql"
 	"github.com/uller91/goChirpy/internal/database"
 	"github.com/joho/godotenv"
+	"time"
+	"github.com/uller91/goChirpy/internal/aut"
 )
 
 
@@ -17,6 +19,7 @@ type apiConfig struct {
 	fileserverHits atomic.Int32
 	database *database.Queries
 	platform string
+	secret string
 }
 
 
@@ -41,6 +44,49 @@ func handlerOk(w http.ResponseWriter, req *http.Request) {
 	w.Write([]byte("OK"))
 }
 
+func (cfg *apiConfig) handlerRefresh(w http.ResponseWriter, req *http.Request) {
+	type Reply struct {
+        Token string `json:"token"`
+    }
+
+	RefreshToken, err := aut.GetBearerToken(req.Header)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Error during token extraction", err)
+		return
+	}
+
+	usrTkn, err := cfg.database.GetUserFromRefreshToken(req.Context(), RefreshToken)
+	if err!= nil || time.Now().UTC().After(usrTkn.TokenExpiresAt) || usrTkn.TokenRevokedAt.Valid {
+		respondWithError(w, http.StatusUnauthorized, "Incorrect or expired token", err)
+		return
+	} 
+
+	expire, _ := time.ParseDuration("1h")
+	token, err := aut.MakeJWT(usrTkn.ID, cfg.secret, expire) 
+	if err!= nil {
+		respondWithError(w, http.StatusInternalServerError, "Error during token creation", err)
+		return
+	} 
+
+	reply := Reply{Token: token,}
+	respondWithJSON(w, http.StatusOK, reply)
+}
+
+func (cfg *apiConfig) handlerRevoke(w http.ResponseWriter, req *http.Request) {
+	RefreshToken, err := aut.GetBearerToken(req.Header)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Error during token extraction", err)
+		return
+	}
+
+	_, err = cfg.database.RevokeRefreshToken(req.Context(), RefreshToken)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Error during token revoking", err)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
 
 func main() {
 	godotenv.Load()	//to load environmental variables
@@ -50,7 +96,7 @@ func main() {
 
 	var counter atomic.Int32
 	counter.Store(0)
-	apiCfg := &apiConfig{fileserverHits: counter, database: dbQueries, platform: os.Getenv("PLATFORM")}
+	apiCfg := &apiConfig{fileserverHits: counter, database: dbQueries, platform: os.Getenv("PLATFORM"), secret: os.Getenv("SECRET")}
 	mux := http.NewServeMux()
 
 	mux.Handle("/app/", apiCfg.middlewareMetricsInc(http.StripPrefix("/app", http.FileServer(http.Dir(".")))))
@@ -62,7 +108,8 @@ func main() {
 	mux.HandleFunc("POST /api/chirps", apiCfg.handlerCreateChirp)
 	mux.HandleFunc("GET /api/chirps", apiCfg.handlerGetAllChirps)
 	mux.HandleFunc("GET /api/chirps/{chirpID}", apiCfg.handlerGetChirp)
-
+	mux.HandleFunc("POST /api/refresh", apiCfg.handlerRefresh)
+	mux.HandleFunc("POST /api/revoke", apiCfg.handlerRevoke)
 	
 	s := http.Server{
 		Addr: ":8080", 

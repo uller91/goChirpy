@@ -10,10 +10,12 @@ import (
 )
 	
 type User struct {
-	ID        uuid.UUID `json:"id"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
-	Email     string `json:"email"`
+	ID        	uuid.UUID `json:"id"`
+	CreatedAt 	time.Time `json:"created_at"`
+	UpdatedAt 	time.Time `json:"updated_at"`
+	Email     	string `json:"email"`
+	Token	  	string `json:"token"`
+	RefreshToken string `json:"refresh_token"`
 	//HashedPassword string `json: "hash"`	 for debugging only!
 }
 
@@ -45,13 +47,35 @@ func (cfg *apiConfig) handlerLoginUser(w http.ResponseWriter, req *http.Request)
 		return
 	} 
 
+	expire, _ := time.ParseDuration("1h")
+	token, err := aut.MakeJWT(usr.ID, cfg.secret, expire) 
+	if err!= nil {
+		respondWithError(w, http.StatusInternalServerError, "Error during token creation", err)
+		return
+	} 
+
+	expire, _ = time.ParseDuration("1440h")
+	now := time.Now().UTC()
+	expiresAt := now.Add(expire)
+	refreshToken, _ := aut.MakeRefreshToken()
+
+	refreshParams := database.CreateRefreshTokenParams{Token: refreshToken, UserID: usr.ID, ExpiresAt: expiresAt}
+	rfrTkn, err := cfg.database.CreateRefreshToken(req.Context(), refreshParams)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "There was a problem during the refresh token creation", err)
+		return
+    }
+
 	returnUsr.ID = usr.ID
 	returnUsr.CreatedAt = usr.CreatedAt
 	returnUsr.UpdatedAt = usr.UpdatedAt
 	returnUsr.Email = usr.Email
+	returnUsr.Token = token
+	returnUsr.RefreshToken = rfrTkn.Token
 
 	respondWithJSON(w, http.StatusOK, returnUsr)
 }
+
 
 func (cfg *apiConfig) handlerCreateUser(w http.ResponseWriter, req *http.Request) {
 	type parameters struct {

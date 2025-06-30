@@ -14,3 +14,8 @@ DELETE FROM users;
 
 -- name: GetUserFromEmail :one
 SELECT * FROM users WHERE email = $1;
+
+-- name: GetUserFromRefreshToken :one
+SELECT users.*, refresh_tokens.expires_at as token_expires_at, refresh_tokens.revoked_at as token_revoked_at from users
+join refresh_tokens on refresh_tokens.user_id = users.id
+WHERE refresh_tokens.token = $1;
