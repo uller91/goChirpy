@@ -19,3 +19,7 @@ SELECT * FROM users WHERE email = $1;
 SELECT users.*, refresh_tokens.expires_at as token_expires_at, refresh_tokens.revoked_at as token_revoked_at from users
 join refresh_tokens on refresh_tokens.user_id = users.id
 WHERE refresh_tokens.token = $1;
+
+-- name: UpdateUserEmailPassword :one
+Update users set email = $1, hashed_password = $2 WHERE id = $3
+RETURNING *;

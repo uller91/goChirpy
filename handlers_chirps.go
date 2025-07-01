@@ -19,6 +19,47 @@ type Chirp struct {
 	}
 
 
+func (cfg *apiConfig) handlerDeleteChirp(w http.ResponseWriter, req *http.Request) {
+	chirpId := (req.PathValue("chirpID"))
+	chirpUuid, err := uuid.Parse(chirpId)
+	if err!= nil {
+		respondWithError(w, http.StatusNotFound, "Non-uuid ID parsed", err)
+		return
+	} 
+
+	token, err := aut.GetBearerToken(req.Header)
+	if err != nil {
+		respondWithError(w, http.StatusUnauthorized, "Error during token extraction", err)
+		return
+	}
+
+	userId, err := aut.ValidateJWT(token, cfg.secret)
+	if err != nil {
+		respondWithError(w, http.StatusUnauthorized, "Invalid token presented", err)
+		return
+	}
+
+	chirp, err :=  cfg.database.GetChirp(req.Context(), chirpUuid)
+	if err!= nil {
+		respondWithError(w, http.StatusNotFound, "Chirp with this ID has not been found", err)
+		return
+	} 
+
+	if chirp.UserID != userId {
+		respondWithError(w, http.StatusForbidden, "Trying to delete the Chirp which doesn't belong to you", err)
+	} else {
+
+	err = cfg.database.DeleteChirp(req.Context(), chirpUuid)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "There was a problem during the chirp deletion", err)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+	}
+}
+
+
 func (cfg *apiConfig) handlerGetChirp(w http.ResponseWriter, req *http.Request) {
 	chirpId := (req.PathValue("chirpID"))
 	chirpUuid, err := uuid.Parse(chirpId)
@@ -118,6 +159,7 @@ func (cfg *apiConfig) handlerCreateChirp(w http.ResponseWriter, req *http.Reques
 
 	respondWithJSON(w, http.StatusCreated, returnChirp)
 }
+
 
 func profanityCheck(s string) string {
 	profanity := []string{"kerfuffle", "sharbert", "fornax"}

@@ -44,6 +44,7 @@ func handlerOk(w http.ResponseWriter, req *http.Request) {
 	w.Write([]byte("OK"))
 }
 
+
 func (cfg *apiConfig) handlerRefresh(w http.ResponseWriter, req *http.Request) {
 	type Reply struct {
         Token string `json:"token"`
@@ -51,7 +52,7 @@ func (cfg *apiConfig) handlerRefresh(w http.ResponseWriter, req *http.Request) {
 
 	RefreshToken, err := aut.GetBearerToken(req.Header)
 	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, "Error during token extraction", err)
+		respondWithError(w, http.StatusUnauthorized, "Error during token extraction", err)
 		return
 	}
 
@@ -72,6 +73,7 @@ func (cfg *apiConfig) handlerRefresh(w http.ResponseWriter, req *http.Request) {
 	respondWithJSON(w, http.StatusOK, reply)
 }
 
+
 func (cfg *apiConfig) handlerRevoke(w http.ResponseWriter, req *http.Request) {
 	RefreshToken, err := aut.GetBearerToken(req.Header)
 	if err != nil {
@@ -88,6 +90,7 @@ func (cfg *apiConfig) handlerRevoke(w http.ResponseWriter, req *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+
 func main() {
 	godotenv.Load()	//to load environmental variables
 	dbURL := os.Getenv("DB_URL")
@@ -101,16 +104,23 @@ func main() {
 
 	mux.Handle("/app/", apiCfg.middlewareMetricsInc(http.StripPrefix("/app", http.FileServer(http.Dir(".")))))
 	mux.HandleFunc("GET /api/healthz", handlerOk)
-	mux.HandleFunc("GET /admin/metrics", apiCfg.handlerReq)
-	mux.HandleFunc("POST /admin/reset", apiCfg.handlerReset)
-	mux.HandleFunc("POST /api/users", apiCfg.handlerCreateUser)
+
 	mux.HandleFunc("POST /api/login", apiCfg.handlerLoginUser)
+	mux.HandleFunc("POST /api/refresh", apiCfg.handlerRefresh)
+	mux.HandleFunc("POST /api/revoke", apiCfg.handlerRevoke)
+
+	mux.HandleFunc("POST /api/users", apiCfg.handlerCreateUser)
+	mux.HandleFunc("PUT /api/users", apiCfg.handlerUpdateUser)
+
 	mux.HandleFunc("POST /api/chirps", apiCfg.handlerCreateChirp)
 	mux.HandleFunc("GET /api/chirps", apiCfg.handlerGetAllChirps)
 	mux.HandleFunc("GET /api/chirps/{chirpID}", apiCfg.handlerGetChirp)
-	mux.HandleFunc("POST /api/refresh", apiCfg.handlerRefresh)
-	mux.HandleFunc("POST /api/revoke", apiCfg.handlerRevoke)
+	mux.HandleFunc("DELETE /api/chirps/{chirpID}", apiCfg.handlerDeleteChirp)
+
+	mux.HandleFunc("GET /admin/metrics", apiCfg.handlerReq)
+	mux.HandleFunc("POST /admin/reset", apiCfg.handlerReset)
 	
+
 	s := http.Server{
 		Addr: ":8080", 
 		Handler: mux,

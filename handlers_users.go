@@ -19,6 +19,58 @@ type User struct {
 	//HashedPassword string `json: "hash"`	 for debugging only!
 }
 
+
+func (cfg *apiConfig) handlerUpdateUser(w http.ResponseWriter, req *http.Request) {
+	type parameters struct {
+        Email string `json:"email"`
+		Password string  `json: "password"`
+    }
+
+	token, err := aut.GetBearerToken(req.Header)
+	if err != nil {
+		respondWithError(w, http.StatusUnauthorized, "Error during token extraction", err)
+		return
+	}
+
+	userId, err := aut.ValidateJWT(token, cfg.secret)
+	if err != nil {
+		respondWithError(w, http.StatusUnauthorized, "Invalid token presented", err)
+		return
+	}
+
+	decoder := json.NewDecoder(req.Body)
+    params := parameters{}
+    err = decoder.Decode(&params)
+    if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Error during JSON decoding", err)
+		return
+    }
+
+	returnUsr := User{}
+
+	hashedPswd, err := aut.HashPassword(params.Password) 
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "There was a problem during password hashing", err)
+		return
+    }
+
+	UsrParams := database.UpdateUserEmailPasswordParams{Email: params.Email, HashedPassword: hashedPswd, ID: userId}
+	newUsr, err := cfg.database.UpdateUserEmailPassword(req.Context(), UsrParams)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "There was a problem during the user creation", err)
+		return
+    }
+
+	returnUsr.ID = newUsr.ID
+	returnUsr.CreatedAt = newUsr.CreatedAt
+	returnUsr.UpdatedAt = newUsr.UpdatedAt
+	returnUsr.Email = newUsr.Email
+	//returnUsr.HashedPassword = newUsr.HashedPassword	for debugging only!
+
+	respondWithJSON(w, http.StatusOK, returnUsr)
+}
+
+
 func (cfg *apiConfig) handlerLoginUser(w http.ResponseWriter, req *http.Request) {
 	type parameters struct {
         Email string `json:"email"`
@@ -114,6 +166,7 @@ func (cfg *apiConfig) handlerCreateUser(w http.ResponseWriter, req *http.Request
 
 	respondWithJSON(w, http.StatusCreated, returnUsr)
 }
+
 
 func (cfg *apiConfig) handlerReset(w http.ResponseWriter, req *http.Request) {
 	if cfg.platform != "dev" {
