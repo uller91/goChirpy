@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/uller91/goChirpy/internal/database"
 	"github.com/uller91/goChirpy/internal/aut"
+	"sort"
 )
 
 type Chirp struct {
@@ -48,7 +49,7 @@ func (cfg *apiConfig) handlerDeleteChirp(w http.ResponseWriter, req *http.Reques
 	if chirp.UserID != userId {
 		respondWithError(w, http.StatusForbidden, "Trying to delete the Chirp which doesn't belong to you", err)
 	} else {
-
+		
 	err = cfg.database.DeleteChirp(req.Context(), chirpUuid)
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "There was a problem during the chirp deletion", err)
@@ -86,14 +87,33 @@ func (cfg *apiConfig) handlerGetChirp(w http.ResponseWriter, req *http.Request) 
 
 
 func (cfg *apiConfig) handlerGetAllChirps(w http.ResponseWriter, req *http.Request) {
-	chirps, err := cfg.database.GetChirps(req.Context())
-	if err!= nil {
-		respondWithError(w, http.StatusInternalServerError, "There was a problem during the chirps retrieval", err)
-		return
-	} 
+	authorId := req.URL.Query().Get("author_id")
 
+	chirps := []database.Chirp{}
 	returnChirps := []Chirp{}
 	chirpChirp := Chirp{}
+	var err error
+
+	if authorId != "" {
+		authorUuid, err := uuid.Parse(authorId)
+		if err!= nil {
+			respondWithError(w, http.StatusNotFound, "Non-uuid ID parsed", err)
+			return
+		} 
+
+		chirps, err = cfg.database.GetChirpsByAuthor(req.Context(), authorUuid)
+		if err!= nil {
+			respondWithError(w, http.StatusInternalServerError, "There was a problem during the chirps retrieval", err)
+			return
+		} 
+	} else {
+		chirps, err = cfg.database.GetChirps(req.Context())
+		if err!= nil {
+			respondWithError(w, http.StatusInternalServerError, "There was a problem during the chirps retrieval", err)
+			return
+		} 
+	}
+	
 	for _, chirp := range chirps {
 		chirpChirp.ID = chirp.ID
 		chirpChirp.CreatedAt = chirp.CreatedAt
@@ -102,6 +122,11 @@ func (cfg *apiConfig) handlerGetAllChirps(w http.ResponseWriter, req *http.Reque
 		chirpChirp.UserID = chirp.UserID
 
 		returnChirps = append(returnChirps, chirpChirp)
+	}
+
+	order := req.URL.Query().Get("sort")
+	if order == "desc" {
+		sort.Slice(returnChirps, func(i, j int) bool {return returnChirps[j].CreatedAt.Before(returnChirps[i].CreatedAt)})
 	}
 
 	respondWithJSON(w, http.StatusOK, returnChirps)

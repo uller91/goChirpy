@@ -23,3 +23,7 @@ WHERE refresh_tokens.token = $1;
 -- name: UpdateUserEmailPassword :one
 Update users set email = $1, hashed_password = $2 WHERE id = $3
 RETURNING *;
+
+-- name: UpdateCirpyRed :one
+Update users set is_chirpy_red = 'true' WHERE id = $1
+RETURNING *;

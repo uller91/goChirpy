@@ -16,7 +16,58 @@ type User struct {
 	Email     	string `json:"email"`
 	Token	  	string `json:"token"`
 	RefreshToken string `json:"refresh_token"`
+	IsChirpyRed    bool	`json:"is_chirpy_red"`
 	//HashedPassword string `json: "hash"`	 for debugging only!
+}
+
+
+func (cfg *apiConfig) handlerChirpyRed(w http.ResponseWriter, req *http.Request) {
+	type parameters struct {
+	Event string `json:"event"`
+	Data  struct {
+		UserID string `json:"user_id"`
+	} `json:"data"`
+	}
+	
+	apiKey, err := aut.GetAPIKey(req.Header)
+	if err != nil {
+		respondWithError(w, http.StatusUnauthorized, "Error during token extraction", err)
+		return
+	} else if apiKey != cfg.polkaKey {
+		respondWithError(w, http.StatusUnauthorized, "Wrong API key was sent", err)
+		return
+	}
+
+
+	decoder := json.NewDecoder(req.Body)
+    params := parameters{}
+    err = decoder.Decode(&params)
+    if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Error during JSON decoding", err)
+		return
+    }
+
+	if params.Event != "user.upgraded" {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	} else {
+
+		userID, err := uuid.Parse(params.Data.UserID)
+		if err!= nil {
+			respondWithError(w, http.StatusNotFound, "Non-uuid ID parsed", err)
+			return
+		} 
+
+		_, err = cfg.database.UpdateCirpyRed(req.Context(), userID) 
+		if err != nil {
+		respondWithError(w, http.StatusNotFound, "User not found", err)
+		return
+    	}
+
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	
 }
 
 
@@ -65,6 +116,7 @@ func (cfg *apiConfig) handlerUpdateUser(w http.ResponseWriter, req *http.Request
 	returnUsr.CreatedAt = newUsr.CreatedAt
 	returnUsr.UpdatedAt = newUsr.UpdatedAt
 	returnUsr.Email = newUsr.Email
+	returnUsr.IsChirpyRed = newUsr.IsChirpyRed.Bool
 	//returnUsr.HashedPassword = newUsr.HashedPassword	for debugging only!
 
 	respondWithJSON(w, http.StatusOK, returnUsr)
@@ -124,6 +176,7 @@ func (cfg *apiConfig) handlerLoginUser(w http.ResponseWriter, req *http.Request)
 	returnUsr.Email = usr.Email
 	returnUsr.Token = token
 	returnUsr.RefreshToken = rfrTkn.Token
+	returnUsr.IsChirpyRed = usr.IsChirpyRed.Bool
 
 	respondWithJSON(w, http.StatusOK, returnUsr)
 }
@@ -162,6 +215,7 @@ func (cfg *apiConfig) handlerCreateUser(w http.ResponseWriter, req *http.Request
 	returnUsr.CreatedAt = newUsr.CreatedAt
 	returnUsr.UpdatedAt = newUsr.UpdatedAt
 	returnUsr.Email = newUsr.Email
+	returnUsr.IsChirpyRed = newUsr.IsChirpyRed.Bool
 	//returnUsr.HashedPassword = newUsr.HashedPassword	for debugging only!
 
 	respondWithJSON(w, http.StatusCreated, returnUsr)

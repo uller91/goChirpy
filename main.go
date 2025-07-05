@@ -20,6 +20,7 @@ type apiConfig struct {
 	database *database.Queries
 	platform string
 	secret string
+	polkaKey string
 }
 
 
@@ -99,7 +100,7 @@ func main() {
 
 	var counter atomic.Int32
 	counter.Store(0)
-	apiCfg := &apiConfig{fileserverHits: counter, database: dbQueries, platform: os.Getenv("PLATFORM"), secret: os.Getenv("SECRET")}
+	apiCfg := &apiConfig{fileserverHits: counter, database: dbQueries, platform: os.Getenv("PLATFORM"), secret: os.Getenv("SECRET"), polkaKey: os.Getenv("POLKA_KEY")}
 	mux := http.NewServeMux()
 
 	mux.Handle("/app/", apiCfg.middlewareMetricsInc(http.StripPrefix("/app", http.FileServer(http.Dir(".")))))
@@ -120,6 +121,7 @@ func main() {
 	mux.HandleFunc("GET /admin/metrics", apiCfg.handlerReq)
 	mux.HandleFunc("POST /admin/reset", apiCfg.handlerReset)
 	
+	mux.HandleFunc("POST /api/polka/webhooks", apiCfg.handlerChirpyRed)
 
 	s := http.Server{
 		Addr: ":8080", 

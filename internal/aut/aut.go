@@ -13,6 +13,21 @@ import (
 	//"fmt"
 )
 
+func GetAPIKey(headers http.Header) (string, error) {
+	line := headers.Get("Authorization")
+	if line == "" {
+		return "", errors.New("No token found in the Header")
+	}
+
+	splitToken := strings.Fields(line)
+	if len(splitToken) < 2 || splitToken[0] != "ApiKey" {
+		return "", errors.New("Malformed authorization Header was sent")
+	}
+
+	return splitToken[1], nil
+}
+
+
 func MakeRefreshToken() (string, error) {
 	key := make([]byte, 32)
 	rand.Read(key)
