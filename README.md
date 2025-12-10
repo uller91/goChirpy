@@ -15,7 +15,7 @@ SECRET="*some random string*" - secret string for your website JWTs
 POLKA_KEY="f271c81ff7084ee5b99a5091b42d486e" - as it is. Used to verify "Subscription webhook"
 ```
 
-To install goGator do "go install" in the goGator folder. Now the goGator can be run!
+To install goChirpy do "go install" in the goChirpy folder. Now the goChirpy can be run!
 
 
 The website/app is available using **http://localhost:8080/app/** link.
